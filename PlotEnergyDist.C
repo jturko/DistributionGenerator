@@ -1,17 +1,20 @@
 
+#include "/Users/JTurko/root_scripts/relativistic_tools.C"
+
 #include <iostream>
 #include <fstream>
 
 // taken from Eq 8 in the paper "Muon-Induced Background Study 
 // for Underground Laboratories" by D. Mei and A. Hime
-void PlotEnergyDist(int dx = 10)
+TF1 * PlotEnergyDist(double dx = 10, double h = 1.585, std::string filename = "EnergyDist.dat")
 {
-    double elo = 0;  // GeV
-    double ehi = 1e4;   // GeV
+    double elo = 1;  // GeV
+    double ehi = 1e3;   // GeV
     TF1 * edist = new TF1("edist","[0]*TMath::Exp(-[1]*[2]*([3]-1.)) * TMath::Power( x+[4]*(1-TMath::Exp(-[1]*[2])) , -[3] )", elo, ehi);
     double A = 1;               // 0 - A
+    if(h==1.585) A/=5.76e-11;
     double b = 0.4;             // 1 - b
-    double h = 1.585;           // 2 - h
+                                // 2 - h
     double gamma_mu = 3.77;     // 3 - gamma_mu
     double epsilon_mu = 693;    // 4 - epsilon_mu
     edist->SetParameters(A, b, h, gamma_mu, epsilon_mu);
@@ -19,12 +22,13 @@ void PlotEnergyDist(int dx = 10)
 
     edist->GetXaxis()->SetRangeUser(1,1e3);
     edist->GetYaxis()->SetRangeUser(1e-13,1e-10);
+    new TCanvas();
     edist->Draw();
     //gPad->SetLogx(); gPad->SetLogy();
 
     TGraph * edistgr = new TGraph;
     std::ofstream outfile;
-    outfile.open("EnergyDist.dat");
+    outfile.open(filename);
     double inc = dx; int npt = 0;
     for(double xx=elo; xx<=ehi; xx+=inc, npt++) {
         outfile << xx << "\t" << edist->Eval(xx) << "\n";
@@ -32,49 +36,100 @@ void PlotEnergyDist(int dx = 10)
     }
     outfile.close();
 
-    new TCanvas();
-    edistgr->Draw("a*");
+    //new TCanvas();
+    //edistgr->Draw("a*");
+
+    return edist;
 }
 
-// taken from Eq 1 in the paper "The Cosmic Ray Muon Flux 
-// at WIPP" by E, Esch et al
-void EschEnergyDist()
+// eqn 3.27 from Greider2001 but momentum converted to energy 
+double EnergyDistGrieder327(double * x, double * par)
 {
-    double a = 3.09e-3; // cm^-2 s^-1 sr^-1
-    double b = 0.5483;
-    double c = 0.3977;
+    double energy = x[0];
+    double mu_mass = 0.1056; // GeV/c^2
+    double momentum = T2P(energy,mu_mass);
+    double a = 2.47e-3, b = 0.4854, c = 0.3406;
+    double y = a*std::pow(momentum,-b-c*std::log(momentum));
+    return y/2.35e-3;
+}
 
-    TF1 * pfunc = new TF1("pfunc","[0]*TMath::Power(x,-[1]-[2]*TMath::Log(x))",0.1,1e4);
-    pfunc->SetParameter(0,a);
-    pfunc->SetParameter(1,b);
-    pfunc->SetParameter(2,c);
-    pfunc->GetXaxis()->SetTitle("Muon momentum [GeV/c]");
-    pfunc->GetYaxis()->SetTitle("Relative intensity [arb. units]");
-    pfunc->SetNpx(10000);
-    
-    new TCanvas();
-    pfunc->Draw("");    
-    gPad->SetLogy();
-    gPad->SetLogx();
-    
-    // ([3]*TMath::Sqrt(TMath::Power((x/[3])+1,2)-1)) // this is the p(T) function
-    double m = 0.10566; // GeV c^-2
-    TF1 * tfunc = new TF1("tfunc","[0]*TMath::Power( ([3]*TMath::Sqrt(TMath::Power((x/[3])+1.,2.)-1.)) , -[1]-[2]*TMath::Log( ([3]*TMath::Sqrt(TMath::Power((x/[3])+1.,2.)-1.)) ) )",0.1,1e4);
-    tfunc->SetParameter(0,a);
-    tfunc->SetParameter(1,b);
-    tfunc->SetParameter(2,c);
-    tfunc->SetParameter(3,m);
-    tfunc->GetXaxis()->SetTitle("Muon energy [GeV]");
-    tfunc->GetYaxis()->SetTitle("Relative intensity [arb. units]");
-    tfunc->SetNpx(10000);
+// eqn 3.28 from Greider2001 but momentum converted to energy 
+double EnergyDistGrieder328(double * x, double * par)
+{
+    double energy = x[0];
+    double mu_mass = 0.1056; // GeV/c^2
+    double momentum = T2P(energy,mu_mass);
+    double a = 3.09e-3, b = 0.5483, c = 0.3977;
+    double y = a*std::pow(momentum,-b-c*std::log(momentum));
+    return y/2.35e-3;
+}
 
+// eqn 3.27 from Greider2001, for the momentum though
+TF1 * PlotMomentumEnergyDistGrieder327(double dx=10, std::string filename="EnergyDistGrieder.dat")
+{
+    double plo = 1;  // GeV/c
+    double phi = 1e3;   // GeV/c
+    TF1 * func = new TF1("IvsP","[0]*TMath::Power(x,-[1]-[2]*TMath::Log(x))",plo,phi);
+    func->SetParameters(2.47e-3, 0.4854, 0.3406);
+    func->SetNpx(10000);
+ 
     //new TCanvas();
-    tfunc->SetLineColor(kBlack);
-    tfunc->Draw("");    
-    gPad->SetLogy();
-    gPad->SetLogx();
+    func->GetXaxis()->SetTitle("Momentum [GeV/c]");
+    func->GetYaxis()->SetTitle("Intensity [s^{-1} sr^{-1} m^{-2} (GeV/c)^{-1}]");   
+    //func->Draw();
 
-    TF1 * T2p = new TF1("T2p","([0]*TMath::Sqrt(TMath::Power((x/[0])+1.,2.)-1.))",0,1e4);
-    T2p->SetParameter(0,m);
+    double elo = 1; // GeV
+    double ehi = 1e3; // GeV
+    TF1 * func2 = new TF1("IvsE",EnergyDistGrieder327,elo,ehi,0);
+    func2->SetNpx(10000);
+
+    new TCanvas();
+    func2->GetXaxis()->SetTitle("Energy [GeV]");
+    func2->GetYaxis()->SetTitle("Intensity [s^{-1} sr^{-1} m^{-2} (GeV/c)^{-1}]");   
+    func2->Draw();    
     
+    std::ofstream outfile;
+    outfile.open(filename);
+    double inc = dx;
+    for(double xx=elo; xx<=ehi; xx+=inc) {
+        outfile << xx << "\t" << func2->Eval(xx) << "\n";
+    }
+    outfile.close();
+
+    return func2;
+}
+
+// eqn 3.28 from Greider2001, for the momentum though
+TF1 * PlotMomentumEnergyDistGrieder328(double dx=10, std::string filename="EnergyDistGrieder.dat")
+{
+    double plo = 1;  // GeV/c
+    double phi = 1e3;   // GeV/c
+    TF1 * func = new TF1("IvsP","[0]*TMath::Power(x,-[1]-[2]*TMath::Log(x))",plo,phi);
+    func->SetParameters(2.47e-3, 0.4854, 0.3406);
+    func->SetNpx(10000);
+ 
+    //new TCanvas();
+    func->GetXaxis()->SetTitle("Momentum [GeV/c]");
+    func->GetYaxis()->SetTitle("Intensity [s^{-1} sr^{-1} m^{-2} (GeV/c)^{-1}]");   
+    //func->Draw();
+
+    double elo = 1; // GeV
+    double ehi = 1e3; // GeV
+    TF1 * func2 = new TF1("IvsE",EnergyDistGrieder328,elo,ehi,0);
+    func2->SetNpx(10000);
+
+    new TCanvas();
+    func2->GetXaxis()->SetTitle("Energy [GeV]");
+    func2->GetYaxis()->SetTitle("Intensity [s^{-1} sr^{-1} m^{-2} (GeV/c)^{-1}]");   
+    func2->Draw();    
+    
+    std::ofstream outfile;
+    outfile.open(filename);
+    double inc = dx;
+    for(double xx=elo; xx<=ehi; xx+=inc) {
+        outfile << xx << "\t" << func2->Eval(xx) << "\n";
+    }
+    outfile.close();
+
+    return func2;
 }
